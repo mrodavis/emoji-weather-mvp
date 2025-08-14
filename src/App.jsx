@@ -46,6 +46,15 @@ function monthMatrix(viewDate) {
 
 const mmToIn = (mm) => (mm == null ? null : (mm / 25.4).toFixed(2));
 
+/* Hour label: "2025-08-14T13:00" -> "1p" */
+const hourLabel = (iso) => {
+  const d = new Date(iso);
+  let h = d.getHours();
+  const suff = h >= 12 ? "p" : "a";
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}${suff}`;
+};
+
 /* ---------- Hooks ---------- */
 
 // Geocode by city name (press Search to update)
@@ -102,7 +111,7 @@ function useGeocode(city) {
   return { geo, status };
 }
 
-// Forecast for the current month but clamped to ~16-day horizon
+// Forecast for the current month but clamped to ~15-day horizon
 function useForecast(lat, lon, viewDate) {
   const [data, setData] = useState({});
   const [status, setStatus] = useState("idle");
@@ -127,7 +136,6 @@ function useForecast(lat, lon, viewDate) {
       return;
     }
 
-    // if out of range for entire month, skip fetch
     if (reqStart > reqEnd) {
       setData({});
       setStatus("ready");
@@ -189,8 +197,93 @@ function useForecast(lat, lon, viewDate) {
   return { data, status, reqStart, reqEnd };
 }
 
-/* ---------- App ---------- */
+// Hourly for a specific local date (used by the Day Sheet)
+function useHourly(lat, lon, isoDate) {
+  const [hours, setHours] = useState([]);
+  const [status, setStatus] = useState("idle");
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!lat || !lon || !isoDate) { setHours([]); setStatus("idle"); return; }
+
+    (async () => {
+      setStatus("loading");
+      try {
+        const url = new URL("https://api.open-meteo.com/v1/forecast");
+        url.search = new URLSearchParams({
+          latitude: String(lat),
+          longitude: String(lon),
+          timezone: "auto",
+          start_date: isoDate,
+          end_date: isoDate,
+          hourly: "weathercode,temperature_2m,precipitation_probability,wind_speed_10m",
+        }).toString();
+
+        const res = await fetch(url.toString());
+        if (!res.ok) { setHours([]); setStatus("ready"); return; }
+        const json = await res.json();
+        const h = json?.hourly;
+        if (!h?.time) { setHours([]); setStatus("ready"); return; }
+
+        const rows = h.time.map((t, i) => ({
+          time: t,
+          code: h.weathercode?.[i],
+          temp: h.temperature_2m?.[i],
+          pop: h.precipitation_probability?.[i],
+          wind: h.wind_speed_10m?.[i],
+        }));
+        if (!cancelled) { setHours(rows); setStatus("ready"); }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) { setHours([]); setStatus("ready"); }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [lat, lon, isoDate]);
+
+  return { hours, status };
+}
+
+/* ---------- Day Sheet (modal) ---------- */
+function DaySheet({ isoDate, cityLabel, lat, lon, onClose }) {
+  const { hours, status } = useHourly(lat, lon, isoDate);
+
+  return (
+    <div className="modal" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <div>
+            <div className="sheet-title">
+              {new Date(isoDate).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+            </div>
+            <div className="sheet-sub">{cityLabel}</div>
+          </div>
+          <button className="close" onClick={onClose}>✕</button>
+        </div>
+
+        {status === "loading" && <div className="hint">Loading hourly…</div>}
+        {status === "ready" && hours.length === 0 && <div className="hint">No hourly data.</div>}
+
+        {hours.length > 0 && (
+          <div className="hour-row">
+            {hours.map((h) => (
+              <div key={h.time} className="hour-card">
+                <div className="hour">{hourLabel(h.time)}</div>
+                <div className="big-emoji">{WMO_TO_EMOJI(h.code)}</div>
+                <div className="temp">{Math.round(h.temp)}°</div>
+                <div className="meta">💧 {h.pop ?? 0}%</div>
+                <div className="meta">💨 {Math.round(h.wind ?? 0)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- App ---------- */
 export default function App() {
   // UI: city search box + a committed "currentCity"
   const [cityInput, setCityInput] = useState("New York");
@@ -198,6 +291,9 @@ export default function App() {
 
   // Month being viewed
   const [viewDate, setViewDate] = useState(new Date());
+
+  // For hourly modal
+  const [selectedISO, setSelectedISO] = useState(null);
 
   // Geocode + forecast
   const { geo, status: geoStatus } = useGeocode(currentCity);
@@ -274,7 +370,14 @@ export default function App() {
           const day = data[iso];
           const emoji = day ? WMO_TO_EMOJI(day.code) : "·";
           return (
-            <div key={iso} className={`cell ${inMonth ? "" : "dim"}`}>
+            <div
+              key={iso}
+              className={`cell ${inMonth ? "" : "dim"}`}
+              onClick={() => day && setSelectedISO(iso)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => (e.key === "Enter" && day ? setSelectedISO(iso) : null)}
+            >
               <div className="cell-head">
                 <span className="date">{d.getDate()}</span>
                 <span className="emoji" aria-label="weather">{emoji}</span>
@@ -294,6 +397,16 @@ export default function App() {
           );
         })}
       </section>
+
+      {selectedISO && geo && (
+        <DaySheet
+          isoDate={selectedISO}
+          cityLabel={geo.label}
+          lat={geo.lat}
+          lon={geo.lon}
+          onClose={() => setSelectedISO(null)}
+        />
+      )}
     </div>
   );
 }
