@@ -34,3 +34,18 @@ button {
   background:#14161a; color:#eaeaea; border:1px solid #2a2e35; padding:6px 10px; border-radius:8px; cursor:pointer;
 }
 button:hover { filter: brightness(1.2); }
+
+/* ---- Modal & Hourly Sheet ---- */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display:flex; align-items:flex-end; justify-content:center; z-index:50; }
+.sheet { width:min(980px,96vw); background:#0f1115; border:1px solid #2a2e35; border-radius:16px 16px 0 0; padding:16px; max-height:75vh; overflow:hidden; box-shadow:0 -10px 40px rgba(0,0,0,0.4); }
+.sheet-head { display:flex; align-items:center; justify-content:space-between; }
+.sheet-title { font-weight:700; }
+.sheet-sub { opacity:.75; font-size:12px; margin-top:2px; }
+.close { background:#14161a; border:1px solid #2a2e35; color:#eaeaea; padding:6px 10px; border-radius:8px; }
+
+.hour-row { margin-top:12px; display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; }
+.hour-card { min-width:70px; background:#111317; border:1px solid #252932; border-radius:12px; padding:8px; text-align:center; }
+.hour { font-size:11px; opacity:.8; }
+.big-emoji { font-size:22px; margin:4px 0; }
+.temp { font-weight:700; }
+.meta { font-size:11px; opacity:.85; }
