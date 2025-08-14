@@ -153,6 +153,7 @@ function useForecast(lat, lon, viewDate) {
           timezone: "auto",
           start_date: toYMD(reqStart),
           end_date: toYMD(reqEnd),
+          temperature_unit: "fahrenheit",
         }).toString();
 
         const res = await fetch(url.toString());
@@ -217,6 +218,7 @@ function useHourly(lat, lon, isoDate) {
           start_date: isoDate,
           end_date: isoDate,
           hourly: "weathercode,temperature_2m,precipitation_probability,wind_speed_10m",
+          temperature_unit: "fahrenheit",
         }).toString();
 
         const res = await fetch(url.toString());
